@@ -29,10 +29,8 @@ jobs:
       - name: Install dependencies
         run: |
             npm install
-            npm ci # O el comando para tu gestor de paquetes (pip install -r requirements.txt para Python)
-
-      - name: Build project (if necessary)
-        run: npm run build # O cualquier comando de compilación que uses
+            npm ci 
+            npm run build --if-present
 
       - name: Create ZIP package
         run: |

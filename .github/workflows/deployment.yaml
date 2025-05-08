@@ -34,7 +34,7 @@ jobs:
 
       - name: Create ZIP package
         run: |
-          zip -r lambda-deployment.zip . -x ".git/*" ".github/*" "README.md" 
+          zip lambda-deployment.zip *.js -x ".git/*" ".github/*" "README.md" 
 
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4

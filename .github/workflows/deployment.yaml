@@ -74,7 +74,7 @@ jobs:
             npm run build --if-present
 
       - name: Create ZIP package
-        run: zip -r lambda-deployment.zip . -x ".git/*" ".github/*" "README.md"
+        run: zip lambda-deployment.zip *.js -x ".git/*" ".github/*" "README.md"
 
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -85,7 +85,7 @@ jobs:
       - name: Deploy to AWS Lambda
         run: |
           aws lambda update-function-code \
-            --function-name ${{ secrets.LAMBDA_FUNCTION_NAME_STAGING }} \
+            --function-name test_lambda \
             --zip-file fileb://lambda-deployment.zip \
             --region ${{ secrets.AWS_REGION }}
 
@@ -111,12 +111,10 @@ jobs:
         run: |
             npm install
             npm ci
-
-      - name: Build project (if necessary)
-        run: npm run build
+            npm run build --if-present
 
       - name: Create ZIP package
-        run: zip -r lambda-deployment.zip . -x ".git/*" ".github/*" "README.md"
+        run: zip lambda-deployment.zip *.js -x ".git/*" ".github/*" "README.md"
 
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4

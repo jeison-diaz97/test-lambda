@@ -21,9 +21,8 @@ jobs:
         env:
           CI: true
       - name: zip
-        uses: montudor/action-zip@v0.1.0
-        with:
-          args: zip -qq -r ./bundle.zip ./
+        run: zip lambda-deployment.zip *.js -x ".git/*" ".github/*" "README.md"
+        
       - name: default deploy
         uses: appleboy/lambda-action@master
         with:

@@ -47,7 +47,7 @@ jobs:
       - name: Deploy to AWS Lambda
         run: |
           aws lambda update-function-code \
-            --function-name ${{ secrets.LAMBDA_FUNCTION_NAME_DEVELOP }} \
+            --function-name test_lambda \
             --zip-file fileb://lambda-deployment.zip \
             --region ${{ secrets.AWS_REGION }}
 

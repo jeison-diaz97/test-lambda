@@ -41,7 +41,7 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEVELOP }} # Secreto del ambiente de GitHub
           aws-region: ${{ secrets.AWS_REGION }} # Secreto del ambiente de GitHub
-
+    
       - name: Deploy to AWS Lambda
         run: |
           aws lambda update-function-code \

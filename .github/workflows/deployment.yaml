@@ -73,9 +73,7 @@ jobs:
         run: |
             npm install
             npm ci
-
-      - name: Build project (if necessary)
-        run: npm run build
+            npm run build --if-present
 
       - name: Create ZIP package
         run: zip -r lambda-deployment.zip . -x ".git/*" ".github/*" "README.md"

@@ -1,13 +1,41 @@
-name: PR test
-on: pull_request
+name: PR Baseline Test for Lambda Deployment
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - staging
+      - main
+
 jobs:
-  deploy_source:
-    name: build and deploy lambda
-    strategy:
-      matrix:
-        node-version: [12.x]
+  pr_build_and_package_check:
+    name: Pull Request Build and Package Check
     runs-on: ubuntu-latest
     steps:
-        - name: Run Tests
-          run: echo "Aquí correrías tus pruebas"
-        
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18' # Ensure this matches your deployment pipeline's Node.js version
+
+      - name: Install dependencies and Build
+        run: |
+          echo "Attempting to install dependencies..."
+          npm install
+          echo "Attempting to run npm ci..."
+          npm ci
+          echo "Attempting to run build script if present..."
+          npm run build --if-present
+        # This combined step mirrors the dependency installation and build
+        # from your deployment jobs.
+
+      - name: Test Create ZIP package
+        run: |
+          echo "Attempting to create a test ZIP package..."
+          zip lambda-deployment-pr-check.zip *.js -x ".git/*" ".github/*" "README.md"
+          echo "Test ZIP package creation step completed."
+        # This step doesn't deploy, it just verifies the zip command
+        # can run and the necessary files are presumed to be available
+        # based on the pattern.

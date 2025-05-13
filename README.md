@@ -6,7 +6,7 @@ This GitHub Actions workflow automates the deployment of an AWS Lambda function 
 
 This workflow is designed to streamline the deployment process of a Node.js AWS Lambda function. It leverages GitHub Actions to build, package, and deploy the function to the corresponding AWS environment based on the branch being pushed to. It uses OpenID Connect (OIDC) for secure authentication with AWS.
 
-##  Variablen und Configuration ⚙️
+##  Variable and Configuration ⚙️
 
 This workflow utilizes GitHub Actions secrets to securely store sensitive information. These secrets need to be configured in your repository's settings under `Settings > Secrets and variables > Actions`.
 

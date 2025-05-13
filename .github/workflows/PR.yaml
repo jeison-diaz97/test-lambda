@@ -1,4 +1,4 @@
-name: PR Baseline Test for Lambda Deployment
+name: Dynamic PR Baseline Test for Lambda Deployment
 
 on:
   pull_request:
@@ -11,31 +11,187 @@ jobs:
   pr_build_and_package_check:
     name: Pull Request Build and Package Check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs: # To potentially output detected language if needed by other jobs (optional)
+      detected_language: ${{ steps.detect_language.outputs.language }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Detect Project Language
+        id: detect_language
+        run: |
+          if [ -f package.json ]; then
+            echo "language=node" >> $GITHUB_OUTPUT
+            echo "Detected Node.js project (package.json found)."
+          elif [ -f requirements.txt ] || [ -f pyproject.toml ]; then
+            echo "language=python" >> $GITHUB_OUTPUT
+            echo "Detected Python project (requirements.txt or pyproject.toml found)."
+          else
+            echo "language=unknown" >> $GITHUB_OUTPUT
+            echo "::warning::Could not detect a supported language (Node.js, Python) by checking for common project files."
+          fi
+        # Add more 'elif' conditions here for other languages like Java, Go, Ruby, etc.
+        # e.g., elif [ -f pom.xml ]; then echo "language=java" >> $GITHUB_OUTPUT
+
+      # ----------------------------------------------------------------------
+      # Node.js / JavaScript Specific Steps
+      # ----------------------------------------------------------------------
       - name: Setup Node.js
+        if: steps.detect_language.outputs.language == 'node'
         uses: actions/setup-node@v4
         with:
           node-version: '18' # Ensure this matches your deployment pipeline's Node.js version
 
-      - name: Install dependencies and Build
+      - name: Install Node.js dependencies and Build
+        if: steps.detect_language.outputs.language == 'node'
         run: |
-          echo "Attempting to install dependencies..."
+          echo "Attempting to install Node.js dependencies (npm install)..."
           npm install
           echo "Attempting to run npm ci..."
           npm ci
-          echo "Attempting to run build script if present..."
+          echo "Attempting to run Node.js build script if present..."
           npm run build --if-present
-        # This combined step mirrors the dependency installation and build
-        # from your deployment jobs.
+        # This sequence (npm install THEN npm ci) mirrors the provided pipeline.
+        # Typically, 'npm ci' alone is used in CI for cleaner installs from lock files.
 
-      - name: Test Create ZIP package
+      - name: Test Create Node.js ZIP package
+        if: steps.detect_language.outputs.language == 'node'
         run: |
-          echo "Attempting to create a test ZIP package..."
-          zip lambda-deployment-pr-check.zip *.js -x ".git/*" ".github/*" "README.md"
-          echo "Test ZIP package creation step completed."
-        # This step doesn't deploy, it just verifies the zip command
-        # can run and the necessary files are presumed to be available
-        # based on the pattern.
+          echo "Attempting to create a Node.js test ZIP package..."
+          zip lambda-deployment-node-pr-check.zip *.js -x ".git/*" ".github/*" "README.md"
+          echo "Node.js: Test ZIP package creation step completed."
+        # This command mirrors the pipeline's zipping logic for Node.js
+
+      # ----------------------------------------------------------------------
+      # Python Specific Steps
+      # ----------------------------------------------------------------------
+      - name: Setup Python
+        if: steps.detect_language.outputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9' # Choose a common Python version for Lambda, or make configurable
+
+      - name: Install Python dependencies
+        if: steps.detect_language.outputs.language == 'python'
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f pyproject.toml ]; then
+            echo "Installing Python dependencies using Poetry/PDM (pyproject.toml found)..."
+            pip install poetry # or pdm, depending on your project
+            poetry install --no-interaction --no-ansi # or pdm install
+          elif [ -f requirements.txt ]; then
+            echo "Installing Python dependencies using pip (requirements.txt found)..."
+            pip install -r requirements.txt
+          else
+            echo "::warning::Python project detected, but no pyproject.toml or requirements.txt found. Skipping dependency installation."
+          fi
+
+      - name: Test Create Python ZIP package
+        if: steps.detect_language.outputs.language == 'python'
+        run: |
+          echo "Attempting to create a Python test ZIP package..."
+          mkdir python_deployment_package
+          # Copy your Python source files. Adjust if your files are in a subdirectory e.g., 'src/'
+          echo "Copying Python source files..."
+          find . -maxdepth 1 -name "*.py" -exec cp {} python_deployment_package/ \;
+          # If your code is in a specific directory, e.g., 'app':
+          # if [ -d app ]; then cp -r app/* python_deployment_package/; fi
+
+          echo "Installing dependencies into the package directory..."
+          # This installs dependencies directly into the package for Lambda deployment
+          if [ -f pyproject.toml ]; then
+            # For poetry, you might export a requirements.txt first for packaging
+            poetry export -f requirements.txt --output requirements.for.packaging.txt --without-hashes
+            pip install -r requirements.for.packaging.txt -t ./python_deployment_package
+            rm requirements.for.packaging.txt
+          elif [ -f requirements.txt ]; then
+            pip install -r requirements.txt -t ./python_deployment_package
+          fi
+
+          echo "Zipping Python package..."
+          cd python_deployment_package
+          zip -r ../lambda-deployment-python-pr-check.zip .
+          cd ..
+          rm -rf python_deployment_package # Clean up
+          echo "Python: Test ZIP package creation step completed."
+
+      # ----------------------------------------------------------------------
+      # Handle cases where no specific language was detected or matched
+      # ----------------------------------------------------------------------
+      - name: Report on Language Detection
+        if: always() # Always run this step to report status
+        run: |
+          echo "Language detection result: ${{ steps.detect_language.outputs.language }}"
+          if [ "${{ steps.detect_language.outputs.language }}" == "unknown" ]; then
+            echo "::notice::No specific language checks (Node.js, Python) were triggered for this PR."
+            echo "If your Lambda uses a different language, consider adding specific checks to this workflow."
+          fi
+        # If you require a known language to be detected for the PR check to be meaningful,
+            # you could uncomment the following lines to make the job fail:
+            # echo "::error::PR check requires a detected and supported language (Node.js or Python)."
+            # exit 1
+            
+      # New step to post a summary comment to the PR
+      - name: Post PR Summary Comment
+        # Run this step if the event is a pull request, regardless of job success/failure
+        if: github.event_name == 'pull_request' && (success() || failure())
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { repo: { owner, repo }, issue: { number: issue_number }, runId } = context;
+            const detectedLanguage = "${{ steps.detect_language.outputs.language }}";
+            const jobStatus = "${{ job.status }}"; // 'success', 'failure', 'cancelled'
+
+            let commentBody = `### PR Baseline Test Summary 🤖\n\n`;
+            commentBody += `**Overall Status:** ${jobStatus === 'success' ? '✅ Passed' : '❌ Failed'}\n`;
+            commentBody += `**Detected Language:** **${detectedLanguage}**\n\n`;
+
+            if (jobStatus === 'failure') {
+              commentBody += `Something went wrong during the checks. Please review the logs.\n`;
+            } else { // Job status is success or cancelled (though cancelled might not run this step depending on 'if')
+              if (detectedLanguage === "node") {
+                commentBody += "✅ Node.js checks (setup, install/build, package test) completed successfully.\n";
+              } else if (detectedLanguage === "python") {
+                commentBody += "✅ Python checks (setup, install, package test) completed successfully.\n";
+              } else if (detectedLanguage === "unknown") {
+                commentBody += "⚠️ No specific language checks were triggered as the language was not detected or is not yet supported by this PR check.\n";
+              } else {
+                 commentBody += `❔ Checks for language '${detectedLanguage}' completed with overall status: ${jobStatus}.\n`;
+              }
+            }
+
+            commentBody += `\nFor detailed logs, see the [workflow run](https://github.com/${owner}/${repo}/actions/runs/${runId}).`;
+
+            // Check if there's an existing comment from this action to update it, or create a new one.
+            // This part makes the comment "sticky" or updates if already present.
+            const signature = ""; // Unique signature
+            commentBody = signature + "\n" + commentBody;
+
+            const comments = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number,
+            });
+
+            const existingComment = comments.data.find(comment => comment.user.login === 'github-actions[bot]' && comment.body.startsWith(signature));
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existingComment.id,
+                body: commentBody
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body: commentBody
+              });
+            }
+          

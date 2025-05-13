@@ -1,0 +1,130 @@
+name: Deploy Lambda to AWS
+
+on:
+  push:
+    branches:
+      - develop  # Despliega a develop cuando hay push a la rama develop
+      - staging  # Despliega a staging cuando hay push a la rama staging
+      - main     # Despliega a production cuando hay push a la rama main (o master)
+
+jobs:
+  deploy_develop:
+    if: github.ref == 'refs/heads/develop' # Condición para ejecutar solo en la rama develop
+    name: Deploy to Develop Environment
+    runs-on: ubuntu-latest
+    environment: develop # Especifica el ambiente de GitHub
+    permissions: # Necesario para OIDC
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Configura tu entorno de ejecución (ej. Node.js, Python)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18' # O la versión que necesites
+
+      - name: Install dependencies
+        run: |
+            npm install
+            npm ci 
+            npm run build --if-present
+
+      - name: Create ZIP package
+        run: |
+          zip lambda-deployment.zip *.js -x ".git/*" ".github/*" "README.md" 
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEVELOP }} # Secreto del ambiente de GitHub
+          aws-region: ${{ secrets.AWS_REGION }} # Secreto del ambiente de GitHub
+    
+      - name: Deploy to AWS Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name test_lambda \
+            --zip-file fileb://lambda-deployment.zip \
+            --region ${{ secrets.AWS_REGION }}
+
+  deploy_staging:
+    if: github.ref == 'refs/heads/staging'
+    name: Deploy to Staging Environment
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      id-token: write
+      contents: read
+    needs: deploy_develop # Opcional: si quieres que staging dependa de un despliegue exitoso a develop
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: |
+            npm install
+            npm ci
+            npm run build --if-present
+
+      - name: Create ZIP package
+        run: zip lambda-deployment.zip *.js -x ".git/*" ".github/*" "README.md"
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGING }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy to AWS Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name test_lambda \
+            --zip-file fileb://lambda-deployment.zip \
+            --region ${{ secrets.AWS_REGION }}
+
+  deploy_production:
+    if: github.ref == 'refs/heads/main' # O la rama que uses para producción
+    name: Deploy to Production Environment
+    runs-on: ubuntu-latest
+    environment: production # Esto puede requerir aprobación manual si se configura en GitHub Environments
+    permissions:
+      id-token: write
+      contents: read
+    needs: deploy_staging # Opcional: si quieres que production dependa de un despliegue exitoso a staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: |
+            npm install
+            npm ci
+            npm run build --if-present
+
+      - name: Create ZIP package
+        run: zip lambda-deployment.zip *.js -x ".git/*" ".github/*" "README.md"
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PRODUCTION }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy to AWS Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name test_lambda \
+            --zip-file fileb://lambda-deployment.zip \
+            --region ${{ secrets.AWS_REGION }}

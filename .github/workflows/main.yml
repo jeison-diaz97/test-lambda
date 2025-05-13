@@ -1,5 +1,8 @@
 name: deploy to lambda
-on: [push]
+on:
+  push:
+    branches:
+      main
 jobs:
   deploy_source:
     name: build and deploy lambda
@@ -21,9 +24,8 @@ jobs:
         env:
           CI: true
       - name: zip
-        uses: montudor/action-zip@v0.1.0
-        with:
-          args: zip -qq -r ./bundle.zip ./
+        run: zip lambda-deployment.zip *.js -x ".git/*" ".github/*" "README.md"
+
       - name: default deploy
         uses: appleboy/lambda-action@master
         with:
@@ -31,4 +33,4 @@ jobs:
           aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws_region: us-west-2
           function_name: test_lambda
-          zip_file: bundle.zip
+          zip_file: lambda-deployment.zip
